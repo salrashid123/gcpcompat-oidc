@@ -112,8 +112,8 @@ gcloud beta iam workload-identity-pools providers create-oidc oidc-provider-1 \
     --workload-identity-pool="oidc-pool-1" \
     --issuer-uri="https://securetoken.google.com/cicp-oidc/" \
     --location="global" \
-    --attribute-mapping="google.subject=assertion.sub,attribute.isadmin=assertion.isadmin" \
-    --attribute-condition="assertion.isadmin=='true' && assertion.aud=='cicp-oidc'"
+    --attribute-mapping="google.subject=assertion.sub,attribute.isadmin=assertion.isadmin,attribute.aud=assertion.aud" \
+    --attribute-condition="attribute.isadmin=='true' && attribute.aud=='cicp-oidc'"
 ```
 
   Notice the attribute mapping:
@@ -121,9 +121,14 @@ gcloud beta iam workload-identity-pools providers create-oidc oidc-provider-1 \
   * `attribute.isadmin=assertion.isadmin`:  This will extract the value of the custom claim `isadmin` and then make it available for IAM rule later as an assertion
 
   Noticethe attribute conditions:
-  * `assertion.isadmin=='true'`: This describes the condition that this provider must meet.  The provided idToken's `isadmin` field MUST be set to true
-  * `assertion.aud=='cicp-oidc'`:  This describes the audience value in the token must be set to `cicp-oidc`
+  * `attribute.isadmin=='true'`: This describes the condition that this provider must meet.  The provided idToken's `isadmin` field MUST be set to true
+  * `attribute.aud=='cicp-oidc'`:  This describes the audience value in the token must be set to `cicp-oidc`
 
+If you set the attribute conditions to something else, you should see an error:
+
+```
+Unable to exchange token {"error":"unauthorized_client","error_description":"The given credential is rejected by the attribute condition."},
+```
 
 * Create GCS Resource
 
