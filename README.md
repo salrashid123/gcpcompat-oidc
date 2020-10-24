@@ -228,3 +228,47 @@ If you used IAM impersonation, you will see the principalperforming the imperson
 
 and then the impersonated account accessing GCS
 ![images/gcs_iam_access.png](images/gcs_iam_access.png)
+
+
+### Organization Policy Restrict
+
+You can also define a GCP [Organization Policy](https://cloud.google.com/resource-manager/docs/organization-policy/creating-managing-policies) that restricts which providers can be enabled for federation
+
+* `constraints/iam.workloadIdentityPoolProviders`
+
+For example, for the following test organization, we will define a policy that only allows you to create a workload identity using
+a the specified OIDC providers URL
+
+```bash
+$ gcloud organizations list
+    DISPLAY_NAME               ID  DIRECTORY_CUSTOMER_ID
+    esodemoapp2.com  673208786092              redacted
+
+
+
+$ gcloud resource-manager org-policies allow constraints/iam.workloadIdentityPoolProviders \
+   --organization=673208786092 https://securetoken.google.com/cicp-oidc/
+
+      constraint: constraints/iam.workloadIdentityPoolProviders
+      etag: BwWybJWeyeU=
+      listPolicy:
+        allowedValues:
+        - https://securetoken.google.com/cicp-oidc/
+      updateTime: '2020-10-24T15:45:19.794Z'
+
+
+$ gcloud beta iam workload-identity-pools providers create-oidc oidc-provider-3 \
+    --workload-identity-pool="oidc-pool-1" \
+    --issuer-uri="https://securetoken.google.com/foo/" \
+    --location="global" \
+    --attribute-mapping="google.subject=assertion.sub,attribute.isadmin=assertion.isadmin,attribute.aud=assertion.aud" \
+    --attribute-condition="attribute.isadmin=='true' && attribute.aud=='cicp-oidc'"
+    
+    ERROR: (gcloud.beta.iam.workload-identity-pools.providers.create-oidc) FAILED_PRECONDITION: Precondition check failed.
+    - '@type': type.googleapis.com/google.rpc.PreconditionFailure
+      violations:
+      - description: "Org Policy violated for value: 'https://securetoken.google.com/foo/'."
+        subject: orgpolicy:projects/user2project2/locations/global/workloadIdentityPools/oidc-pool-1
+        type: constraints/iam.workloadIdentityPoolProviders
+
+```
