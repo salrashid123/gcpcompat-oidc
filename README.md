@@ -15,7 +15,7 @@ This repo is the second part that explores how to use the [workload identity fed
 
 >> `salrashid123/oauth2/google` is also not supported by Google
 
-If you are interested in exchaning AWS credentials for GCP, see
+If you are interested in exchanging AWS credentials for GCP, see
 
 - [Exchange AWS Credentials for GCP Credentials using GCP STS Service](https://github.com/salrashid123/gcpcompat-aws)
 
@@ -25,68 +25,51 @@ If you are interested in exchaning AWS credentials for GCP, see
 
 First we need an OIDC token provider that will give us an `id_token`.  Just for demonstration, we will use [Google Cloud Identity Platform](https://cloud.google.com/identity-platform) as the provider (you can ofcourse use okta, auth0, even google itself).
 
-Setup the identity platform project and acquire an id_token as described in the following tutorial
+Setup the identity platform project and acquire an id_token as described in at the *end* of this repo
 
-- [Kubernetes RBAC with Google Cloud Identity Platform/Firebase Tokens](https://github.com/salrashid123/kubernetes_oidc_gcp_identity_platform)
+The GCP project i am using in the example here is called `cicp-oidc-test`.  Identity platform will automatically create a 'bare bones' oidc `.well-known` endpoint at a url that includes the projectID:
 
-Only up until the step where you generate the token which is all we need to do here.
-
-The GCP project i am using in the example here is called `cicp-oidc`.  Identity platform will automatically create a 'bare bones' oidc `.well-known` endpoint at a url that includes the projectID:
-
-* [https://securetoken.google.com/cicp-oidc/.well-known/openid-configuration](https://securetoken.google.com/cicp-oidc/.well-known/openid-configuration)
+* [https://securetoken.google.com/cicp-oidc-test/.well-known/openid-configuration](https://securetoken.google.com/cicp-oidc/.well-known/openid-configuration)
 
 
 Generate the token and notice that the token is for a user called "alice" and her token has the following claims
 
-```bash
-export API_KEY=AIzaSyBEHKUoYqPQkQus-redacted
-
-$ python fb_token.py print $API_KEY alice
-Getting custom id_token
-FB Token for alice
------------------------------------------------------
-Getting STS id_token
-STS Token for alice
-ID TOKEN: eyJhbGciOiJSUzI1NiIsImtpZCI6ImQxMGM4Zj...
--------
-refreshToken TOKEN: AG8BCneX1SdmYipwN-NhJG6dwxbncLT7cuH-redacted
-Verified User alice
-```
-
 - `id_token`:
 
 ```json
-{
-  "isadmin": "true",
-  "groups": [
-    "group1",
-    "group2"
-  ],
-  "iss": "https://securetoken.google.com/cicp-oidc",
-  "aud": "cicp-oidc",
-  "auth_time": 1603538019,
-  "user_id": "alice",
-  "sub": "alice",
-  "iat": 1603538019,
-  "exp": 1603541619,
-  "firebase": {
-    "identities": {},
-    "sign_in_provider": "custom"
+  {
+    "name": "alice",
+    "isadmin": "true",
+    "iss": "https://securetoken.google.com/cicp-oidc-test",
+    "aud": "cicp-oidc-test",
+    "auth_time": 1603624301,
+    "user_id": "alice@domain.com",
+    "sub": "alice@domain.com",
+    "iat": 1603624301,
+    "exp": 1603627901,
+    "email": "alice@domain.com",
+    "email_verified": true,
+    "firebase": {
+      "identities": {
+        "email": [
+          "alice@domain.com"
+        ]
+      },
+      "sign_in_provider": "password"
+    }
   }
-}
 ```
 
 Some things to note
 
-* `issuer` is `https://securetoken.google.com/cicp-oidc`,
+* `issuer` is `https://securetoken.google.com/cicp-oidc-test`,
 * `sub` field describes the username
 * `isadmin` is a custom claim
 
 
 ### Configure OIDC Federation
 
-We are not ready to configure a GCP Project (which can ofcourse be a different project that the one used for identity platform!)
-
+Just for demonstration, we will configure one gcp project that will own the identity provider (GCP Identity Platform) and the GCP federation that allows it access to a resource.  You can ofcourse use different projects or any other identity provider that supports OIDC.
 
 
 ```bash
@@ -100,7 +83,7 @@ export PROJECT_NUMBER=`gcloud projects describe $PROJECT_ID --format='value(proj
 gcloud beta iam workload-identity-pools create oidc-pool-1 \
     --location="global" \
     --description="OIDC Pool " \
-    --display-name="OIDC Pool"
+    --display-name="OIDC Pool" --project $PROJECT_ID
 ```
 
 * Configure provider
@@ -110,10 +93,10 @@ gcloud beta iam workload-identity-pools create oidc-pool-1 \
 ```bash
 gcloud beta iam workload-identity-pools providers create-oidc oidc-provider-1 \
     --workload-identity-pool="oidc-pool-1" \
-    --issuer-uri="https://securetoken.google.com/cicp-oidc/" \
+    --issuer-uri="https://securetoken.google.com/cicp-oidc-test/" \
     --location="global" \
     --attribute-mapping="google.subject=assertion.sub,attribute.isadmin=assertion.isadmin,attribute.aud=assertion.aud" \
-    --attribute-condition="attribute.isadmin=='true' && attribute.aud=='cicp-oidc'"
+    --attribute-condition="attribute.isadmin=='true' && attribute.aud=='cicp-oidc-test'" --project $PROJECT_ID
 ```
 
   Notice the attribute mapping:
@@ -122,7 +105,7 @@ gcloud beta iam workload-identity-pools providers create-oidc oidc-provider-1 \
 
   Noticethe attribute conditions:
   * `attribute.isadmin=='true'`: This describes the condition that this provider must meet.  The provided idToken's `isadmin` field MUST be set to true
-  * `attribute.aud=='cicp-oidc'`:  This describes the audience value in the token must be set to `cicp-oidc`
+  * `attribute.aud=='cicp-oidc-test'`:  This describes the audience value in the token must be set to the project you are using (in my case `cicp-oidc-test`)
 
 If you set the attribute conditions to something else, you should see an error:
 
@@ -146,12 +129,13 @@ gsutil cp foo.txt gs://$PROJECT_ID-test
 
 ```bash
 gcloud projects add-iam-policy-binding $PROJECT_ID  \
- --member "principal://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/oidc-pool-1/subject/alice" \
+ --member "principal://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/oidc-pool-1/subject/alice@domain.com" \
  --role roles/storage.objectAdmin
 ```
  
+  Notice that in this mode we are **directly** allowing the federated identity access to a GCS resource
 
-* Allow Impersonated 
+* Allow Impersonation
 
   The type of IAM definition described in the previous step will only work for very few GCP resources (as of 10/24/20).
 
@@ -169,12 +153,12 @@ gcloud iam service-accounts create oidc-federated
 
 gcloud iam service-accounts add-iam-policy-binding oidc-federated@$PROJECT_ID.iam.gserviceaccount.com \
     --role roles/iam.workloadIdentityUser \
-    --member "principal://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/oidc-pool-1/subject/alice"
+    --member "principal://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/oidc-pool-1/subject/alice@domain.com"
 ```
 
   Then allow this service account access to GCS
 ```bash
-gsutil iam ch serviceAccount:oidc-federated@$PROJECT_ID.iam.gserviceaccount.com:objectViewer gs://mineral-minutia-820-cab1
+gsutil iam ch serviceAccount:oidc-federated@$PROJECT_ID.iam.gserviceaccount.com:objectViewer gs://$PROJECT_ID-test
 ```
 
 
@@ -186,9 +170,9 @@ Edit `main.go` and specify the variables hardcoded including the id_token from t
 ```golang
 	sourceToken := "eyJhbGciOiJSUzI1NiIsImtp..."
 	scope := "https://www.googleapis.com/auth/cloud-platform"
-	targetResource := "//iam.googleapis.com/projects/1071284184436/locations/global/workloadIdentityPools/oidc-pool-1/providers/oidc-provider-1"
-	targetServiceAccount := "oidc-federated@mineral-minutia-820.iam.gserviceaccount.com"
-	gcpBucketName := "mineral-minutia-820-cab1"
+	targetResource := "//iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/oidc-pool-1/providers/oidc-provider-1"
+	targetServiceAccount := "oidc-federated@cicp-oidc-test.iam.gserviceaccount.com"
+	gcpBucketName := "cicp-oidc-test-test"
 	gcpObjectName := "foo.txt"
 
 	oTokenSource, err := sal.OIDCFederatedTokenSource(
@@ -197,7 +181,7 @@ Edit `main.go` and specify the variables hardcoded including the id_token from t
 			Scope:                scope,
 			TargetResource:       targetResource,
 			TargetServiceAccount: targetServiceAccount,
-			UseIAMToken:          true,
+			UseIAMToken:          false,
 		},
 	)
 ```
@@ -214,21 +198,26 @@ fooooo
 What you should see is the output of the GCS file
 
 
-Change the value of `UseIAMToken` to true and try running it again.  That flag will either use the federated token directly to access a resource or attempt to exchange it for an IAMCredentials token. 
+Change the value of `UseIAMToken` to true and try running it again.  That flag will either use the federated token directly to access a resource or attempt to exchange it for an IAMCredentials token.  If set to false, the TokenSource will use **directly** use the federated token to access GCS.  If set to true, the tokensource will run the exchange
 
 
 ### Logging
 
-If you used the STS token directly, the principal will appear in the GCS logs
+If you used the STS token directly, the principal will appear in the GCS logs if you enabled audit logging
+
+![images/audit_log_config.png](images/audit_log_config.png)
+
 ![images/gcs_sts_access.png](images/gcs_sts_access.png)
 
-If you used IAM impersonation, you will see the principalperforming the impersonation
+If you used IAM impersonation, you will see the principal performing the impersonation
 
 ![images/iam_impersonation.png](images/iam_impersonation.png)
 
 and then the impersonated account accessing GCS
+
 ![images/gcs_iam_access.png](images/gcs_iam_access.png)
 
+Notice the `protoPayload.authenticationInfo` structure between the two types of auth
 
 ### Organization Policy Restrict
 
@@ -247,13 +236,13 @@ $ gcloud organizations list
 
 
 $ gcloud resource-manager org-policies allow constraints/iam.workloadIdentityPoolProviders \
-   --organization=673208786092 https://securetoken.google.com/cicp-oidc/
+   --organization=673208786092 https://securetoken.google.com/cicp-oidc-test/
 
       constraint: constraints/iam.workloadIdentityPoolProviders
       etag: BwWybJWeyeU=
       listPolicy:
         allowedValues:
-        - https://securetoken.google.com/cicp-oidc/
+        - https://securetoken.google.com/cicp-oidc-test/
       updateTime: '2020-10-24T15:45:19.794Z'
 
 
@@ -262,7 +251,7 @@ $ gcloud beta iam workload-identity-pools providers create-oidc oidc-provider-3 
     --issuer-uri="https://securetoken.google.com/foo/" \
     --location="global" \
     --attribute-mapping="google.subject=assertion.sub,attribute.isadmin=assertion.isadmin,attribute.aud=assertion.aud" \
-    --attribute-condition="attribute.isadmin=='true' && attribute.aud=='cicp-oidc'"
+    --attribute-condition="attribute.isadmin=='true' && attribute.aud=='cicp-oidc-test'"
     
     ERROR: (gcloud.beta.iam.workload-identity-pools.providers.create-oidc) FAILED_PRECONDITION: Precondition check failed.
     - '@type': type.googleapis.com/google.rpc.PreconditionFailure
@@ -271,4 +260,153 @@ $ gcloud beta iam workload-identity-pools providers create-oidc oidc-provider-3 
         subject: orgpolicy:projects/user2project2/locations/global/workloadIdentityPools/oidc-pool-1
         type: constraints/iam.workloadIdentityPoolProviders
 
+```
+
+---
+
+#### Create OIDC token using Identity Platform
+
+The following shows how to acquire an OIDC token for use with this tutorial.  As mentioned, we are using FirebaseAuth/Identity Platform; you can use any other provider as long as the `.well-known` endpoint is discoverable by GCP
+
+1. Enable Identity Platform
+
+2. Add `Email/Password` as the provider
+
+3. Note the `API_KEY` and authDomain value
+ ![images/cicp_config.png](images/cicp_config.png)
+
+4. Edit `login.js` and enter in the API Key/AuthDomain
+  In my case, it is:
+
+```javascript
+var firebaseConfig = {
+  apiKey: "AIzaSyAf7wesN7auBeyfJQJs5d_QfT24kMH7OG8",
+  authDomain: "cicp-oidc-test.firebaseapp.com",
+  projectId: "cicp-oidc-test",
+  appId: "cicp-oidc-test",
+};
+```
+
+5. Create Firebase Service Account
+
+  - [Set up a Firebase project and service account](https://firebase.google.com/docs/admin/setup#set-up-project-and-service-account)
+
+   Generate a service account and download it from the firebase console: (note, replace with your projectID in the URL field below)
+   - [https://console.firebase.google.com/u/0/project/cicp-oidc-test/settings/serviceaccounts/adminsdk](https://console.firebase.google.com/u/0/project/cicp-oidc-test/settings/serviceaccounts/adminsdk)
+
+   Save the file as `/tmp/svc_account.json`
+
+6. Create user
+
+```bash
+npm i firebase firebase-admin
+```
+
+```bash
+$ export GOOGLE_APPLICATION_CREDENTIALS=/tmp/svc_account.json
+
+$ node create.js 
+
+    { uid: 'alice@domain.com',
+      email: 'alice@domain.com',
+      emailVerified: true,
+      displayName: 'alice',
+      photoURL: undefined,
+      phoneNumber: undefined,
+      disabled: false,
+      metadata:
+      { lastSignInTime: null,
+        creationTime: 'Sun, 25 Oct 2020 11:11:14 GMT' },
+      passwordHash: undefined,
+      passwordSalt: undefined,
+      customClaims: { isadmin: 'true' },
+      tokensValidAfterTime: 'Sun, 25 Oct 2020 11:11:14 GMT',
+      tenantId: undefined,
+      providerData:
+      [ { uid: 'alice@domain.com',
+          displayName: 'alice',
+          email: 'alice@domain.com',
+          photoURL: undefined,
+          providerId: 'password',
+          phoneNumber: undefined } ] }
+```
+
+At this pont, user Alice has a custom claim associated with the user.  Empirically, the attribute values must be string (i.e, i intentionally set `isadmin` to (string) `true` (not boolean))
+
+7. Create id_token
+  Login as that user using email/password.
+
+  The following script actually performs a login and displays the JSON response a firebase/identity platform user would see (i.,e they would see that struct after logging in the browser too)
+
+```json
+$ node login.js 
+    {
+      "user": {
+        "uid": "alice@domain.com",
+        "displayName": "alice",
+        "photoURL": null,
+        "email": "alice@domain.com",
+        "emailVerified": true,
+        "phoneNumber": null,
+        "isAnonymous": false,
+        "tenantId": null,
+        "providerData": [
+          {
+            "uid": "alice@domain.com",
+            "displayName": "alice",
+            "photoURL": null,
+            "email": "alice@domain.com",
+            "phoneNumber": null,
+            "providerId": "password"
+          }
+        ],
+        "apiKey": "AIzaSyAf7wesN7auBeyfJQJs5d_QfT24kMH7OG8",
+        "appName": "[DEFAULT]",
+        "authDomain": "cicp-oidc-test.firebaseapp.com",
+        "stsTokenManager": {
+          "apiKey": "AIzaSyAf7wesN7auBeyfJQJs5d_QfT24kMH7OG8",
+          "refreshToken": "AG8BCncodfNZo5RjfUIaayD-redacted",
+          "accessToken": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImQxMGM4ZjhiMGRjN2Y1NWUyYjM1NDFmMjllNWFjMzc0M2Y3N2NjZWUiLCJ0eXAiOiJKV1QifQ.eyJuYW1lIjoiYWxpY2UiLCJpc2FkbWluIjoidHJ1ZSIsImlzcyI6Imh0dHBzOi8vc2VjdXJldG9rZW4uZ29vZ2xlLmNvbS9jaWNwLW9pZGMtdGVzdCIsImF1ZCI6ImNpY3Atb2lkYy10ZXN0IiwiYXV0aF90aW1lIjoxNjAzNjI0MzAxLCJ1c2VyX2lkIjoiYWxpY2VAZG9tYWluLmNvbSIsInN1YiI6ImFsaWNlQGRvbWFpbi5jb20iLCJpYXQiOjE2MDM2MjQzMDEsImV4cCI6MTYwMzYyNzkwMSwiZW1haWwiOiJhbGljZUBkb21haW4uY29tIiwiZW1haWxfdmVyaWZpZWQiOnRydWUsImZpcmViYXNlIjp7ImlkZW50aXRpZXMiOnsiZW1haWwiOlsiYWxpY2VAZG9tYWluLmNvbSJdfSwic2lnbl9pbl9wcm92aWRlciI6InBhc3N3b3JkIn19.oSB2vYLo8gX_CakDaO9MGHYeXGwHUySYYPhhFqL7Fx-glSrQx5O_fMSLqF0p48SvHlN47bNDYfhuwR5HRbxnn_w6XxP0cFkGInRiZngwQyFapiEbpnlT7GCU-u2KWfci0mi770giOBn4ZmiavqtmENZPyR2FcwKCRn9tPNpzFPLXG-uUPjd1zj3YblFsHwBtZo8jcmkDMMo_-Y52z5JQiHyG5sfANjldlgabnygUtInAHNvjJXDiRP0p0u4yuOjjq8mjMX9IPN1KXyHoSqaBjQCVmQqbzlx7jIl75dUxAI7x-OZ-4eZ4fWZvItYaLoQpBHQWpxLszqCYztCKz4dzxg",
+          "expirationTime": 1603627901000
+        },
+        "redirectEventId": null,
+        "lastLoginAt": "1603624301973",
+        "createdAt": "1603624274304",
+        "multiFactor": {
+          "enrolledFactors": []
+        }
+      },
+      "credential": null,
+      "additionalUserInfo": {
+        "providerId": "password",
+        "isNewUser": false
+      },
+      "operationType": "signIn"
+    }
+```
+
+Notice the `access_token` (which is actually a JWT id_token which you can decode at [jwt.io](jwt.io))
+
+```json
+  {
+    "name": "alice",
+    "isadmin": "true",
+    "iss": "https://securetoken.google.com/cicp-oidc-test",
+    "aud": "cicp-oidc-test",
+    "auth_time": 1603624301,
+    "user_id": "alice@domain.com",
+    "sub": "alice@domain.com",
+    "iat": 1603624301,
+    "exp": 1603627901,
+    "email": "alice@domain.com",
+    "email_verified": true,
+    "firebase": {
+      "identities": {
+        "email": [
+          "alice@domain.com"
+        ]
+      },
+      "sign_in_provider": "password"
+    }
+  }
 ```
