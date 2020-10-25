@@ -296,6 +296,8 @@ var firebaseConfig = {
 
    Save the file as `/tmp/svc_account.json`
 
+   ![images/firebase_sa.png](images/firebase_sa.png)
+
 6. Create user
 
 ```bash
