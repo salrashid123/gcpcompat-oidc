@@ -22,7 +22,7 @@ var (
 
 	scope = flag.String("scope", "https://www.googleapis.com/auth/cloud-platform", "Scope of the target token")
 
-	useIAMToken = flag.Bool("useIAMToken", true, "Use IAMCredentials Token exchange")
+	useIAMToken = flag.Bool("useIAMToken", false, "Use IAMCredentials Token exchange")
 )
 
 func main() {
