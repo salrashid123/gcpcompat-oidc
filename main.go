@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"io"
 	"log"
 	"os"
@@ -11,24 +12,33 @@ import (
 	"google.golang.org/api/option"
 )
 
-var ()
+var (
+	gcpBucket               = flag.String("gcpBucket", "mineral-minutia-820-cab1", "GCS Bucket to access")
+	gcpObjectName           = flag.String("gcpObjectName", "foo.txt", "GCS object to access")
+	gcpResource             = flag.String("gcpResource", "//iam.googleapis.com/projects/1071284184436/locations/global/workloadIdentityPools/oidc-pool-1/providers/oidc-provider-1", "the GCP resource to map")
+	gcpTargetServiceAccount = flag.String("gcpTargetServiceAccount", "oidc-federated@mineral-minutia-820.iam.gserviceaccount.com", "the ServiceAccount to impersonate")
+
+	sourceToken = flag.String("sourceToken", "", "Source OIDC token to echange")
+
+	scope = flag.String("scope", "https://www.googleapis.com/auth/cloud-platform", "Scope of the target token")
+
+	useIAMToken = flag.Bool("useIAMToken", true, "Use IAMCredentials Token exchange")
+)
 
 func main() {
+	flag.Parse()
 
-	sourceToken := "eyJhbGciOiJSUzI1NiIsImtpZCI6ImQxMGM4ZjhiMGRjN2Y1NWUyYjM1NDFmMjllNWFjMzc0M2Y3N2NjZWUiLCJ0eXAiOiJKV1QifQ.eyJuYW1lIjoiYWxpY2UiLCJpc2FkbWluIjoidHJ1ZSIsImlzcyI6Imh0dHBzOi8vc2VjdXJldG9rZW4uZ29vZ2xlLmNvbS9jaWNwLW9pZGMtdGVzdCIsImF1ZCI6ImNpY3Atb2lkYy10ZXN0IiwiYXV0aF90aW1lIjoxNjAzNjI0MzAxLCJ1c2VyX2lkIjoiYWxpY2VAZG9tYWluLmNvbSIsInN1YiI6ImFsaWNlQGRvbWFpbi5jb20iLCJpYXQiOjE2MDM2MjQzMDEsImV4cCI6MTYwMzYyNzkwMSwiZW1haWwiOiJhbGljZUBkb21haW4uY29tIiwiZW1haWxfdmVyaWZpZWQiOnRydWUsImZpcmViYXNlIjp7ImlkZW50aXRpZXMiOnsiZW1haWwiOlsiYWxpY2VAZG9tYWluLmNvbSJdfSwic2lnbl9pbl9wcm92aWRlciI6InBhc3N3b3JkIn19.oSB2vYLo8gX_CakDaO9MGHYeXGwHUySYYPhhFqL7Fx-glSrQx5O_fMSLqF0p48SvHlN47bNDYfhuwR5HRbxnn_w6XxP0cFkGInRiZngwQyFapiEbpnlT7GCU-u2KWfci0mi770giOBn4ZmiavqtmENZPyR2FcwKCRn9tPNpzFPLXG-uUPjd1zj3YblFsHwBtZo8jcmkDMMo_-Y52z5JQiHyG5sfANjldlgabnygUtInAHNvjJXDiRP0p0u4yuOjjq8mjMX9IPN1KXyHoSqaBjQCVmQqbzlx7jIl75dUxAI7x-OZ-4eZ4fWZvItYaLoQpBHQWpxLszqCYztCKz4dzxg"
-	scope := "https://www.googleapis.com/auth/cloud-platform"
-	targetResource := "//iam.googleapis.com/projects/540341659919/locations/global/workloadIdentityPools/oidc-pool-1/providers/oidc-provider-1"
-	targetServiceAccount := "oidc-federated@cicp-oidc-test.iam.gserviceaccount.com"
-	gcpBucketName := "cicp-oidc-test-test"
-	gcpObjectName := "foo.txt"
+	if *sourceToken == "" {
+		log.Fatalf("sourceToken cannot benull")
+	}
 
 	oTokenSource, err := sal.OIDCFederatedTokenSource(
 		&sal.OIDCFederatedTokenConfig{
-			SourceToken:          sourceToken,
-			Scope:                scope,
-			TargetResource:       targetResource,
-			TargetServiceAccount: targetServiceAccount,
-			UseIAMToken:          true,
+			SourceToken:          *sourceToken,
+			Scope:                *scope,
+			TargetResource:       *gcpResource,
+			TargetServiceAccount: *gcpTargetServiceAccount,
+			UseIAMToken:          *useIAMToken,
 		},
 	)
 
@@ -44,8 +54,8 @@ func main() {
 		log.Fatalf("Could not create storage Client: %v", err)
 	}
 
-	bkt := storageClient.Bucket(gcpBucketName)
-	obj := bkt.Object(gcpObjectName)
+	bkt := storageClient.Bucket(*gcpBucket)
+	obj := bkt.Object(*gcpObjectName)
 	r, err := obj.NewReader(ctx)
 	if err != nil {
 		panic(err)

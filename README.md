@@ -166,30 +166,21 @@ gsutil iam ch serviceAccount:oidc-federated@$PROJECT_ID.iam.gserviceaccount.com:
 
 At this point, we are ready to use the OIDC token and exchange it.
 
-Edit `main.go` and specify the variables hardcoded including the id_token from the provider earlier (yes, i'm lazy!)
-```golang
-	sourceToken := "eyJhbGciOiJSUzI1NiIsImtp..."
-	scope := "https://www.googleapis.com/auth/cloud-platform"
-	targetResource := "//iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/oidc-pool-1/providers/oidc-provider-1"
-	targetServiceAccount := "oidc-federated@cicp-oidc-test.iam.gserviceaccount.com"
-	gcpBucketName := "cicp-oidc-test-test"
-	gcpObjectName := "foo.txt"
+Run `main.go` and specify the variables hardcoded including the id_token from the provider earlier (yes, i'm lazy!)
 
-	oTokenSource, err := sal.OIDCFederatedTokenSource(
-		&sal.OIDCFederatedTokenConfig{
-			SourceToken:          sourceToken,
-			Scope:                scope,
-			TargetResource:       targetResource,
-			TargetServiceAccount: targetServiceAccount,
-			UseIAMToken:          false,
-		},
-	)
-```
 
 Now run the sample:
 
 ```bash
-$ go run main.go 
+$ export OIDC_TOKEN=<the access_token value from login.js below>
+$ go run main.go \
+   --gcpBucket mineral-minutia-820-cab1 \
+   --gcpObjectName foo.txt \
+   --useIAMToken \
+   --gcpResource //iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/oidc-pool-1/providers/oidc-provider-1 \
+   --gcpTargetServiceAccount oidc-federated@$PROJECT_ID.iam.gserviceaccount.com \
+   --useIAMToken \
+   --sourceToken $OIDC_TOKEN
 2020/10/24 07:16:14 OIDC Derived GCP access_token: ya29.c.KuQC4gf-xkKbOCIzRGAmAPdL2unF4vLCjZG7TZv7l7bjCK67n2qduIFDs63HR...
 
 fooooo
@@ -197,8 +188,28 @@ fooooo
 
 What you should see is the output of the GCS file
 
-
 Change the value of `UseIAMToken` to true and try running it again.  That flag will either use the federated token directly to access a resource or attempt to exchange it for an IAMCredentials token.  If set to false, the TokenSource will use **directly** use the federated token to access GCS.  If set to true, the tokensource will run the exchange
+
+
+### Using Federated or IAM Tokens
+
+GCP STS Tokens can be used directly against a few GCP services as described here
+
+Skip step `(5)` of [Exchange Token](https://cloud.google.com/iam/docs/access-resources-oidc#exchange-token)
+
+What that means is you can skip the step to exchange the GCP Federation token for an Service Account token and _directly_ apply IAM policies on the resource.
+
+This not only saves the step of running the exchange but omits the need for a secondary GCP service account to impersonate.
+
+To use GCS, allow either the mapped identity direct access to the resource.  In this case `storage.objectAdmin` access which we already allowed earlier:
+
+```
+gcloud projects add-iam-policy-binding $PROJECT_ID  \
+ --member "principal://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/oidc-pool-1/subject/alice@domain.com" \
+ --role roles/storage.objectAdmin
+```
+
+To use Federated tokens, use remove the `--useIAMToken` flag
 
 
 ### Logging

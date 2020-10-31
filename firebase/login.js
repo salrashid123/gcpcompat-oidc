@@ -5,10 +5,10 @@ const uid = "alice@domain.com";
 const password = 'Password1'
 
 var firebaseConfig = {
-  apiKey: "AIzaSyAf7wesN7auBeyfJQJs5d_QfT24kMH7OG8",
-  authDomain: "cicp-oidc-test.firebaseapp.com",
-  projectId: "cicp-oidc-test",
-  appId: "cicp-oidc-test",
+  apiKey: "AIzaSyDxRf3ggNGHO8z6xxx",
+  authDomain: "mineral-minutia-820.firebaseapp.com",
+  projectId: "mineral-minutia-820",
+  appId: "mineral-minutia-820",
 };
 
 firebase.initializeApp(firebaseConfig);
