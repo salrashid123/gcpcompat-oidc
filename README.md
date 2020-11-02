@@ -102,6 +102,8 @@ gcloud beta iam workload-identity-pools providers create-oidc oidc-provider-1 \
   Notice the attribute mapping:
   * `google.subject=assertion.sub`:  This will extract and populate the google subject value from the provided id_token's `sub`  field.
   * `attribute.isadmin=assertion.isadmin`:  This will extract the value of the custom claim `isadmin` and then make it available for IAM rule later as an assertion
+  
+  Note, though it isn't demonstrated in this repo, you can also map groups directly:  `google.groups=assertion.group`
 
   Noticethe attribute conditions:
   * `attribute.isadmin=='true'`: This describes the condition that this provider must meet.  The provided idToken's `isadmin` field MUST be set to true
