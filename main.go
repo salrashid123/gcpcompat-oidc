@@ -18,40 +18,48 @@ var (
 	gcpResource             = flag.String("gcpResource", "//iam.googleapis.com/projects/1071284184436/locations/global/workloadIdentityPools/oidc-pool-1/providers/oidc-provider-1", "the GCP resource to map")
 	gcpTargetServiceAccount = flag.String("gcpTargetServiceAccount", "oidc-federated@mineral-minutia-820.iam.gserviceaccount.com", "the ServiceAccount to impersonate")
 
-	sourceToken = flag.String("sourceToken", "", "Source OIDC token to echange")
+	sourceToken = flag.String("sourceToken", "", "Source OIDC token to exchange")
 
-	scope = flag.String("scope", "https://www.googleapis.com/auth/cloud-platform", "Scope of the target token")
-
+	scope       = flag.String("scope", "https://www.googleapis.com/auth/cloud-platform", "Scope of the target token")
+	useADC      = flag.Bool("useADC", false, "Use Application Default Credentials")
 	useIAMToken = flag.Bool("useIAMToken", false, "Use IAMCredentials Token exchange")
 )
 
 func main() {
 	flag.Parse()
 
-	if *sourceToken == "" {
-		log.Fatalf("sourceToken cannot benull")
-	}
-
-	oTokenSource, err := sal.OIDCFederatedTokenSource(
-		&sal.OIDCFederatedTokenConfig{
-			SourceToken:          *sourceToken,
-			Scope:                *scope,
-			TargetResource:       *gcpResource,
-			TargetServiceAccount: *gcpTargetServiceAccount,
-			UseIAMToken:          *useIAMToken,
-		},
-	)
-
-	tok, err := oTokenSource.Token()
-	if err != nil {
-		log.Fatal(err)
-	}
-	log.Printf("OIDC Derived GCP access_token: %s\n", tok.AccessToken)
-
+	var storageClient *storage.Client
 	ctx := context.Background()
-	storageClient, err := storage.NewClient(ctx, option.WithTokenSource(oTokenSource))
-	if err != nil {
-		log.Fatalf("Could not create storage Client: %v", err)
+	if *useADC {
+		var err error
+		storageClient, err = storage.NewClient(ctx)
+		if err != nil {
+			log.Fatalf("Could not create storage Client: %v", err)
+		}
+	} else {
+		if *sourceToken == "" {
+			log.Fatalf("sourceToken cannot be null")
+		}
+		oTokenSource, err := sal.OIDCFederatedTokenSource(
+			&sal.OIDCFederatedTokenConfig{
+				SourceToken:          *sourceToken,
+				Scope:                *scope,
+				TargetResource:       *gcpResource,
+				TargetServiceAccount: *gcpTargetServiceAccount,
+				UseIAMToken:          *useIAMToken,
+			},
+		)
+
+		// tok, err := oTokenSource.Token()
+		// if err != nil {
+		// 	log.Fatal(err)
+		// }
+		//log.Printf("OIDC Derived GCP access_token: %s\n", tok.AccessToken)
+
+		storageClient, err = storage.NewClient(ctx, option.WithTokenSource(oTokenSource))
+		if err != nil {
+			log.Fatalf("Could not create storage Client: %v", err)
+		}
 	}
 
 	bkt := storageClient.Bucket(*gcpBucket)
