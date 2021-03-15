@@ -5,7 +5,7 @@ const uid = "alice@domain.com";
 const password = 'Password1'
 
 var firebaseConfig = {
-  apiKey: "AIzaSyDxRf3ggNGHO8z6Hic-redacted",
+  apiKey: "AIzaSyDxRf3ggNGHO8z6HicMCGq8CAUZmIcv6gY",
   authDomain: "mineral-minutia-820.firebaseapp.com",
   projectId: "mineral-minutia-820",
   appId: "mineral-minutia-820",

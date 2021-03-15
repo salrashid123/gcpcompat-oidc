@@ -58,134 +58,10 @@ In both cases, the GCP Identity is a Service Account that the external user impe
 
 First we need an OIDC token provider that will give us an `id_token`.  Just for demonstration, we will use [Google Cloud Identity Platform](https://cloud.google.com/identity-platform) as the provider (you can of course use okta, auth0, even google itself).
 
-Setup the identity platform project and acquire an id_token as described in at the *end* of this repo
-
 The GCP project i am using in the example here is called `mineral-minutia-820`.  Identity platform will automatically create a 'bare bones' oidc `.well-known` endpoint at a url that includes the projectID:
 
 * [https://securetoken.google.com/mineral-minutia-820/.well-known/openid-configuration](https://securetoken.google.com/mineral-minutia-820/.well-known/openid-configuration)
 
-
-Generate the token and notice that the token is for a user called "alice" and her token has the following claims
-
-
-```json
-  {
-    "name": "alice",
-    "isadmin": "true",
-    "iss": "https://securetoken.google.com/mineral-minutia-820",
-    "aud": "cicp-oidc-test",
-    "auth_time": 1603624301,
-    "user_id": "alice@domain.com",
-    "sub": "alice@domain.com",
-    "iat": 1603624301,
-    "exp": 1603627901,
-    "email": "alice@domain.com",
-    "email_verified": true,
-    "firebase": {
-      "identities": {
-        "email": [
-          "alice@domain.com"
-        ]
-      },
-      "sign_in_provider": "password"
-    }
-  }
-```
-
-Some things to note
-
-* `issuer` is `https://securetoken.google.com/mineral-minutia-820`,
-* `sub` field describes the username
-* `isadmin` is a custom claim which we will use for the `principalSet://` mapping
-
-
-### Configure OIDC Federation
-
-Just for demonstration, we will configure one gcp project that will own the identity provider (GCP Identity Platform) and the GCP federation that allows it access to a resource. 
-
-```bash
-export PROJECT_ID=`gcloud config get-value core/project`
-export PROJECT_NUMBER=`gcloud projects describe $PROJECT_ID --format='value(projectNumber)'`
-```
-
-* Create identity pool
-
-```bash
-gcloud beta iam workload-identity-pools create oidc-pool-1 \
-    --location="global" \
-    --description="OIDC Pool " \
-    --display-name="OIDC Pool" --project $PROJECT_ID
-```
-
-* Configure provider
-  
-  The following command will configure the provider itself.  Notice that we specify the issuer URL without the `.well-known` URL path (since its, well, well-known)
-
-```bash
-gcloud beta iam workload-identity-pools providers create-oidc oidc-provider-1 \
-    --workload-identity-pool="oidc-pool-1" \
-    --issuer-uri="https://securetoken.google.com/mineral-minutia-820/" \
-    --location="global" \
-    --attribute-mapping="google.subject=assertion.sub,attribute.isadmin=assertion.isadmin,attribute.aud=assertion.aud" \
-    --attribute-condition="attribute.isadmin=='true' && attribute.aud=='mineral-minutia-820'" --project $PROJECT_ID
-```
-
-  Notice the attribute mapping:
-  * `google.subject=assertion.sub`:  This will extract and populate the google subject value from the provided id_token's `sub`  field.
-  * `attribute.isadmin=assertion.isadmin`:  This will extract the value of the custom claim `isadmin` and then make it available for IAM rule later as an assertion
-
-  Notice  the attribute conditions:
-  * `attribute.isadmin=='true'`: This describes the condition that this provider must meet.  The provided idToken's `isadmin` field MUST be set to true
-  * `attribute.aud=='mineral-minutia-820'`:  This describes the audience value in the token must be set to the project you are using (in my case `mineral-minutia-820`)
-
-If you set the attribute conditions to something else, you should see an error during authentication:
-
-```
-Unable to exchange token {"error":"unauthorized_client","error_description":"The given credential is rejected by the attribute condition."},
-```
-
-* Create GCS Resource
-
-  Create a test GCP resource like GCS and upload a file
-
-```bash
-gsutil mb gs://$PROJECT_ID-test
-echo fooooo > foo.txt
-gsutil cp foo.txt gs://$PROJECT_ID-test
-```
-
-* Crate Service Account
-
-  By default, the OIDC identity will need to map to a Service Account which inturn will have access to the GCS resource.  The external identity will get validated by GCP and then will impersonate a GCP Service Account
-
-```bash
-gcloud iam service-accounts create oidc-federated
-```
-
-* Allow federated identity map
-
-This allows a single user `alice@domain.com` permissions to impersonate the Service Account
-
-```bash
-
-gcloud iam service-accounts add-iam-policy-binding oidc-federated@$PROJECT_ID.iam.gserviceaccount.com \
-    --role roles/iam.workloadIdentityUser \
-    --member "principal://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/oidc-pool-1/subject/alice@domain.com"
-```
-
-This allows any user part of the OIDC issuer that has the claim embedded in the token with key-value `isadmin==true`
-
-```bash
-gcloud iam service-accounts add-iam-policy-binding oidc-federated@$PROJECT_ID.iam.gserviceaccount.com \
-    --role roles/iam.workloadIdentityUser \
-    --member "principalSet://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/oidc-pool-1/attribute.isadmin/true"
-```
-
-* Allow service account access to GCS
-
-```bash
-gsutil iam ch serviceAccount:oidc-federated@$PROJECT_ID.iam.gserviceaccount.com:objectViewer gs://$PROJECT_ID-test
-```
 
 
 #### Create OIDC token using Identity Platform
@@ -317,7 +193,9 @@ export OIDC_TOKEN=`node login.js  | jq -r '.user.stsTokenManager.accessToken'`
 echo $OIDC_TOKEN > /tmp/oidccred.txt
 ```
 
-Notice the `access_token` (which is actually a JWT id_token which you can decode at [jwt.io](jwt.io))
+The `access_token` is actually a JWT id_token which you can decode at [jwt.io](jwt.io):
+
+Notice the `isadmin` and `sub` fields there
 
 ```json
   {
@@ -341,6 +219,101 @@ Notice the `access_token` (which is actually a JWT id_token which you can decode
       "sign_in_provider": "password"
     }
   }
+```
+
+Some things to note
+
+* `issuer` is `https://securetoken.google.com/mineral-minutia-820`,
+* `sub` field describes the username
+* `isadmin` is a custom claim which we will use for the `principalSet://` mapping
+
+
+### Configure OIDC Federation
+
+We can now configure the GCP project for OIDC Federation
+
+```bash
+export PROJECT_ID=`gcloud config get-value core/project`
+export PROJECT_NUMBER=`gcloud projects describe $PROJECT_ID --format='value(projectNumber)'`
+```
+
+* Create identity pool
+
+```bash
+gcloud beta iam workload-identity-pools create oidc-pool-1 \
+    --location="global" \
+    --description="OIDC Pool " \
+    --display-name="OIDC Pool" --project $PROJECT_ID
+```
+
+* Configure provider
+  
+  The following command will configure the provider itself.  Notice that we specify the issuer URL without the `.well-known` URL path (since its, well, well-known)
+
+```bash
+gcloud beta iam workload-identity-pools providers create-oidc oidc-provider-1 \
+    --workload-identity-pool="oidc-pool-1" \
+    --issuer-uri="https://securetoken.google.com/mineral-minutia-820/" \
+    --location="global" \
+    --attribute-mapping="google.subject=assertion.sub,attribute.isadmin=assertion.isadmin,attribute.aud=assertion.aud" \
+    --attribute-condition="attribute.isadmin=='true' && attribute.aud=='mineral-minutia-820'" --project $PROJECT_ID
+```
+
+  Notice the attribute mapping:
+  * `google.subject=assertion.sub`:  This will extract and populate the google subject value from the provided id_token's `sub`  field.
+  * `attribute.isadmin=assertion.isadmin`:  This will extract the value of the custom claim `isadmin` and then make it available for IAM rule later as an assertion
+
+  Notice  the attribute conditions:
+  * `attribute.isadmin=='true'`: This describes the condition that this provider must meet.  The provided idToken's `isadmin` field MUST be set to true
+  * `attribute.aud=='mineral-minutia-820'`:  This describes the audience value in the token must be set to the project you are using (in my case `mineral-minutia-820`)
+
+If you set the attribute conditions to something else, you should see an error during authentication:
+
+```
+Unable to exchange token {"error":"unauthorized_client","error_description":"The given credential is rejected by the attribute condition."},
+```
+
+* Create GCS Resource
+
+  Create a test GCP resource like GCS and upload a file
+
+```bash
+gsutil mb gs://$PROJECT_ID-test
+echo fooooo > foo.txt
+gsutil cp foo.txt gs://$PROJECT_ID-test
+```
+
+* Crate Service Account
+
+  By default, the OIDC identity will need to map to a Service Account which inturn will have access to the GCS resource.  The external identity will get validated by GCP and then will impersonate a GCP Service Account
+
+```bash
+gcloud iam service-accounts create oidc-federated
+```
+
+* Allow federated identity map
+
+This allows a single user `alice@domain.com` permissions to impersonate the Service Account
+
+```bash
+
+gcloud iam service-accounts add-iam-policy-binding oidc-federated@$PROJECT_ID.iam.gserviceaccount.com \
+    --role roles/iam.workloadIdentityUser \
+    --member "principal://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/oidc-pool-1/subject/alice@domain.com"
+```
+
+This allows any user part of the OIDC issuer that has the claim embedded in the token with key-value `isadmin==true`
+
+```bash
+gcloud iam service-accounts add-iam-policy-binding oidc-federated@$PROJECT_ID.iam.gserviceaccount.com \
+    --role roles/iam.workloadIdentityUser \
+    --member "principalSet://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/oidc-pool-1/attribute.isadmin/true"
+```
+
+* Allow service account access to GCS
+
+```bash
+gsutil iam ch serviceAccount:oidc-federated@$PROJECT_ID.iam.gserviceaccount.com:objectViewer gs://$PROJECT_ID-test
 ```
 
 ### Manual
