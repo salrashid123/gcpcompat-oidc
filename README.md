@@ -1,68 +1,78 @@
 ## Exchange Generic OIDC Credentials for GCP Credentials using GCP STS Service
 
 
-Procedure and referenced library that will exchange an arbitrary OIDC `id_token` for a GCP credential.
+This is a sample procedure that will exchange an arbitrary OIDC `id_token` for a GCP credential.
 
 You can use the GCP credential then to access any service the mapped principal has GCP IAM permissions on.
 
-The two procedures described in this repo will acquire a Google Credential as described here:
+This article and repo is the second part that explores how to use the workload identity federation capability of GCP which allows for external principals (AWS,Azure or arbitrary OIDC provider) to map to a GCP credential.
+
+The two variations described in this repo will acquire a Google Credential as described here:
  - [https://cloud.google.com/iam/docs/access-resources-oidc#generate](https://cloud.google.com/iam/docs/access-resources-oidc#generate)
 
 The "Automatic" way is recommended and is supported by Google
 
-The "Manual" way is also covered in this repo but I decided to wrap the steps for that into my own library here [github.com/salrashid123/oauth2/google](https://github.com/salrashid123/oauth2#usage-federated-oidc) which surfaces the credential as an [oauth2.TokenSource](https://godoc.org/golang.org/x/oauth2#TokenSource) for use in any GCP cloud library.    
+The "Manual" way is also covered in this repo but I decided to wrap the steps for that into my own library here [github.com/salrashid123/oauth2/google](https://github.com/salrashid123/oauth2#usage-federated-oidc) which surfaces the credential as an [oauth2.TokenSource](https://godoc.org/golang.org/x/oauth2#TokenSource) for use in any GCP cloud library.  
 
-You can certainly use either procedure but the Automatic way is included with the *supported, standard* library.  The Manual way can be done by hand but the wrapped library I'll describe here is not officially supported
+>> NOTE: the library i'm using for the "manual" way is just there as an unsupported demo of a wrapped oauth2 TokenSource! 
 
-The followup samples will demonstrate federation w/ Azure and an arbitrary OIDC provider (okta or Google Cloud Identity Platform)
+You can certainly use either procedure but the Automatic way is included with the *supported, standard* GCP Client library.
 
 >> This repository is not supported by Google
-
 >> `salrashid123/oauth2/google` is also not supported by Google
 
-
-This repo is the second part that explores how to use the [workload identity federation](https://cloud.google.com/iam/docs/access-resources-aws) capability of GCP which allows for external principals (AWS,Azure or arbitrary OIDC provider) to map to a GCP credential.
-
-If you are interested in exchanging AWS credentials for GCP, see
-
-- [Exchange AWS Credentials for GCP Credentials using GCP STS Service](https://github.com/salrashid123/gcpcompat-aws)
+for AWS based exchanges, see
+-[Exchange AWS Credentials for GCP Credentials using GCP STS Service](https://github.com/salrashid123/gcpcompat-aws)
 
 ---
 
-### OIDC
+### Workload Federation - OIDC
 
-There are two types of OIDC creds this repo demonstrates:  
+GCP now surfaces a `STS Service` that will exchange one set of tokens for another using the GCP Secure Token Service (STS) [here](https://cloud.google.com/iam/docs/reference/sts/rest/v1beta/TopLevel/token).  These initial tokens can be either 3rd party OIDC, AWS, Azure or google `access_tokens` that are [downscoped](https://github.com/salrashid123/downscoped_token) (i.,e attenuated in permission set).
+
+To use this tutorial, you need a GCP project with Firebase as the OIDC Provider and the ability to create user/service accounts.
+
+Again, the two types of flows this repo demonstrates:  
 
 - Manual Exchange:
-  In this you manually do all the steps of exchanging `OIDC Token` for a federated token and then finally use that token
+  In this you manually do all the steps of exchanging a Firebase/Identity Platform `id_token` for a federated token and then finally use that token
 
 - Automatic Exchange
-  In this you use the google cloud client libraries to do all the heavy lifting.  This is the recommended approach
-
+  In this you use the google cloud client libraries to do all the heavy lifting.  << This is the recommended approach
 
 >> It is recommended to do the manual first just to understand this capability and then move onto the automatic
 
+#### OIDC --> GCP Identity --> GCP Resource
+
+This tutorial will cover how to use an OIDC token and its claims to a GCP  [principal:// and principalSet://](https://cloud.google.com/iam/docs/workload-identity-federation#impersonation)
+
+
+* User:  `principal://`  This maps a unique user identified by OIDC to a GCP identity
+
+* Group: `principalSet://` This maps any user that has a given attrubute declared in the OIDC token to a GCP identity 
+
+
+In both cases, the GCP Identity is a Service Account that the external user impersonates.
 
 ### Configure OIDC Provider
 
-First we need an OIDC token provider that will give us an `id_token`.  Just for demonstration, we will use [Google Cloud Identity Platform](https://cloud.google.com/identity-platform) as the provider (you can ofcourse use okta, auth0, even google itself).
+First we need an OIDC token provider that will give us an `id_token`.  Just for demonstration, we will use [Google Cloud Identity Platform](https://cloud.google.com/identity-platform) as the provider (you can of course use okta, auth0, even google itself).
 
 Setup the identity platform project and acquire an id_token as described in at the *end* of this repo
 
-The GCP project i am using in the example here is called `cicp-oidc-test`.  Identity platform will automatically create a 'bare bones' oidc `.well-known` endpoint at a url that includes the projectID:
+The GCP project i am using in the example here is called `mineral-minutia-820`.  Identity platform will automatically create a 'bare bones' oidc `.well-known` endpoint at a url that includes the projectID:
 
-* [https://securetoken.google.com/cicp-oidc-test/.well-known/openid-configuration](https://securetoken.google.com/cicp-oidc/.well-known/openid-configuration)
+* [https://securetoken.google.com/mineral-minutia-820/.well-known/openid-configuration](https://securetoken.google.com/mineral-minutia-820/.well-known/openid-configuration)
 
 
 Generate the token and notice that the token is for a user called "alice" and her token has the following claims
 
-- `id_token`:
 
 ```json
   {
     "name": "alice",
     "isadmin": "true",
-    "iss": "https://securetoken.google.com/cicp-oidc-test",
+    "iss": "https://securetoken.google.com/mineral-minutia-820",
     "aud": "cicp-oidc-test",
     "auth_time": 1603624301,
     "user_id": "alice@domain.com",
@@ -84,15 +94,14 @@ Generate the token and notice that the token is for a user called "alice" and he
 
 Some things to note
 
-* `issuer` is `https://securetoken.google.com/cicp-oidc-test`,
+* `issuer` is `https://securetoken.google.com/mineral-minutia-820`,
 * `sub` field describes the username
-* `isadmin` is a custom claim
+* `isadmin` is a custom claim which we will use for the `principalSet://` mapping
 
 
 ### Configure OIDC Federation
 
-Just for demonstration, we will configure one gcp project that will own the identity provider (GCP Identity Platform) and the GCP federation that allows it access to a resource.  You can ofcourse use different projects or any other identity provider that supports OIDC.
-
+Just for demonstration, we will configure one gcp project that will own the identity provider (GCP Identity Platform) and the GCP federation that allows it access to a resource. 
 
 ```bash
 export PROJECT_ID=`gcloud config get-value core/project`
@@ -115,21 +124,21 @@ gcloud beta iam workload-identity-pools create oidc-pool-1 \
 ```bash
 gcloud beta iam workload-identity-pools providers create-oidc oidc-provider-1 \
     --workload-identity-pool="oidc-pool-1" \
-    --issuer-uri="https://securetoken.google.com/cicp-oidc-test/" \
+    --issuer-uri="https://securetoken.google.com/mineral-minutia-820/" \
     --location="global" \
     --attribute-mapping="google.subject=assertion.sub,attribute.isadmin=assertion.isadmin,attribute.aud=assertion.aud" \
-    --attribute-condition="attribute.isadmin=='true' && attribute.aud=='cicp-oidc-test'" --project $PROJECT_ID
+    --attribute-condition="attribute.isadmin=='true' && attribute.aud=='mineral-minutia-820'" --project $PROJECT_ID
 ```
 
   Notice the attribute mapping:
   * `google.subject=assertion.sub`:  This will extract and populate the google subject value from the provided id_token's `sub`  field.
   * `attribute.isadmin=assertion.isadmin`:  This will extract the value of the custom claim `isadmin` and then make it available for IAM rule later as an assertion
 
-  Noticethe attribute conditions:
+  Notice  the attribute conditions:
   * `attribute.isadmin=='true'`: This describes the condition that this provider must meet.  The provided idToken's `isadmin` field MUST be set to true
-  * `attribute.aud=='cicp-oidc-test'`:  This describes the audience value in the token must be set to the project you are using (in my case `cicp-oidc-test`)
+  * `attribute.aud=='mineral-minutia-820'`:  This describes the audience value in the token must be set to the project you are using (in my case `mineral-minutia-820`)
 
-If you set the attribute conditions to something else, you should see an error:
+If you set the attribute conditions to something else, you should see an error during authentication:
 
 ```
 Unable to exchange token {"error":"unauthorized_client","error_description":"The given credential is rejected by the attribute condition."},
@@ -145,205 +154,39 @@ echo fooooo > foo.txt
 gsutil cp foo.txt gs://$PROJECT_ID-test
 ```
 
-* Allow Federated Identity IAM access
+* Crate Service Account
 
-  Configure the federated identity access to GCS bucket.
-
-```bash
-gcloud projects add-iam-policy-binding $PROJECT_ID  \
- --member "principal://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/oidc-pool-1/subject/alice@domain.com" \
- --role roles/storage.objectAdmin
-```
- 
-  Notice that in this mode we are **directly** allowing the federated identity access to a GCS resource
-
-* Allow Impersonation
-
-  The type of IAM definition described in the previous step will only work for very few GCP resources (as of 10/24/20).
-
-  At the moment, it will only work for GCS and iamcredentials API. 
-  For more information, see [Using Federated or IAM Tokens](https://github.com/salrashid123/gcpcompat-aws#using-federated-or-iam-tokens)
-  
-  Since it will work for iamcredentials, we can use a federated token to get yet *another* `access_token` that can be used for arbitrary GCP resources.
-  That is, use  [generateAccessToken](https://cloud.google.com/iam/docs/reference/credentials/rest/v1/projects.serviceAccounts/generateAccessToken)
-
-  To do this, run a similar IAM rule but this time allow it to impersonate a service account 
-
+  By default, the OIDC identity will need to map to a Service Account which inturn will have access to the GCS resource.  The external identity will get validated by GCP and then will impersonate a GCP Service Account
 
 ```bash
 gcloud iam service-accounts create oidc-federated
+```
+
+* Allow federated identity map
+
+This allows a single user `alice@domain.com` permissions to impersonate the Service Account
+
+```bash
 
 gcloud iam service-accounts add-iam-policy-binding oidc-federated@$PROJECT_ID.iam.gserviceaccount.com \
     --role roles/iam.workloadIdentityUser \
     --member "principal://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/oidc-pool-1/subject/alice@domain.com"
 ```
 
-  Then allow this service account access to GCS
+This allows any user part of the OIDC issuer that has the claim embedded in the token with key-value `isadmin==true`
+
+```bash
+gcloud iam service-accounts add-iam-policy-binding oidc-federated@$PROJECT_ID.iam.gserviceaccount.com \
+    --role roles/iam.workloadIdentityUser \
+    --member "principalSet://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/oidc-pool-1/attribute.isadmin/true"
+```
+
+* Allow service account access to GCS
+
 ```bash
 gsutil iam ch serviceAccount:oidc-federated@$PROJECT_ID.iam.gserviceaccount.com:objectViewer gs://$PROJECT_ID-test
 ```
-### Automatic
 
-First configure the ADC bootstrap file:
-
-```bash
-gcloud beta iam workload-identity-pools create-cred-config  \
-  projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/oidc-pool-1/providers/oidc-provider-1   \
-  --service-account=oidc-federated@$PROJECT_ID.iam.gserviceaccount.com   \
-  --output-file=sts-creds.json  \
-  --credential-source-file=/tmp/oidccred.txt
-```
-
-The output/bootstrap file should look something like this:
-
-```json
-{
-  "type": "external_account",
-  "audience": "//iam.googleapis.com/projects/1071284184436/locations/global/workloadIdentityPools/oidc-pool-1/providers/oidc-provider-1",
-  "subject_token_type": "urn:ietf:params:oauth:token-type:jwt",
-  "token_url": "https://sts.googleapis.com/v1/token",
-  "credential_source": {
-    "file": "/tmp/oidccred.txt"
-  },
-  "service_account_impersonation_url": "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/oidc-federated@cicp-oidc-test.iam.gserviceaccount.com:generateAccessToken"
-}
-```
-
-Notice the bootstrap file has a pointer to the file where the actual creds exist `/tmp/oidccreds.txt`.  (eventually other cred sources should be supported)
-
-Before you run the sample, you must first get an OIDC Token.  See `Create OIDC token using Identity Platform` below
-
-> Remember `/tmp/oidccred.txt` has the content of the raw OIDC token to use (i.,e is the value of $OIDC_TOKEN)
-
-```bash
-export OIDC_TOKEN=`node login.js  | jq -r '.user.stsTokenManager.accessToken'`
-echo $OIDC_TOKEN > /tmp/oidccred.txt
-```
-
-```bash
-export GOOGLE_APPLICATION_CREDENTIALS=`pwd`/sts-creds.json
-
-go run main.go    --gcpBucket mineral-minutia-820-cab1    --gcpObjectName foo.txt --useADC 
-```
-
-### Manual
-
-
-Before you run the sample, you must first get an OIDC Token.  See `Create OIDC token using Identity Platform` below
-
-```bash
-export OIDC_TOKEN=`node login.js  | jq -r '.user.stsTokenManager.accessToken'`
-echo $OIDC_TOKEN > /tmp/oidccred.txt
-```
-
-At this point, we are ready to use the OIDC token and exchange it.
-
-
-```bash
-$ go run main.go \
-   --gcpBucket mineral-minutia-820-cab1 \
-   --gcpObjectName foo.txt \
-   --gcpResource //iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/oidc-pool-1/providers/oidc-provider-1 \
-   --gcpTargetServiceAccount oidc-federated@$PROJECT_ID.iam.gserviceaccount.com \
-   --useIAMToken \
-   --sourceToken $OIDC_TOKEN
-
-2020/10/24 07:16:14 OIDC Derived GCP access_token: ya29.c.KuQC4gf-xkKbOCIzRGAmAPdL2unF4vLCjZG7TZv7l7bjCK67n2qduIFDs63HR...
-
-fooooo
-```
-
-What you should see is the output of the GCS file
-
-Change the value of `UseIAMToken` to true and try running it again.  That flag will either use the federated token directly to access a resource or attempt to exchange it for an IAMCredentials token.  If set to false, the TokenSource will use **directly** use the federated token to access GCS.  If set to true, the tokensource will run the exchange
-
-
-### Using Federated or IAM Tokens
-
-GCP STS Tokens can be used directly against a few GCP services as described here
-
-Skip step `(5)` of [Exchange Token](https://cloud.google.com/iam/docs/access-resources-oidc#exchange-token)
-
-What that means is you can skip the step to exchange the GCP Federation token for an Service Account token and _directly_ apply IAM policies on the resource.
-
-This not only saves the step of running the exchange but omits the need for a secondary GCP service account to impersonate.
-
-To use GCS, allow either the mapped identity direct access to the resource.  In this case `storage.objectAdmin` access which we already allowed earlier:
-
-```
-gcloud projects add-iam-policy-binding $PROJECT_ID  \
- --member "principal://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/oidc-pool-1/subject/alice@domain.com" \
- --role roles/storage.objectAdmin
-```
-
-To use Federated tokens, use remove the `--useIAMToken` flag
-
-
->> **If** you want to use Federated tokens only with the Automatic flow, delete `service_account_impersonation_url` declaration in `sts-creds.json`
-
-
-### Logging
-
-If you used the STS token directly, the principal will appear in the GCS logs if you enabled audit logging
-
-![images/audit_log_config.png](images/audit_log_config.png)
-
-![images/gcs_sts_access.png](images/gcs_sts_access.png)
-
-If you used IAM impersonation, you will see the principal performing the impersonation
-
-![images/iam_impersonation.png](images/iam_impersonation.png)
-
-and then the impersonated account accessing GCS
-
-![images/gcs_iam_access.png](images/gcs_iam_access.png)
-
-Notice the `protoPayload.authenticationInfo` structure between the two types of auth
-
-### Organization Policy Restrict
-
-You can also define a GCP [Organization Policy](https://cloud.google.com/resource-manager/docs/organization-policy/creating-managing-policies) that restricts which providers can be enabled for federation
-
-* `constraints/iam.workloadIdentityPoolProviders`
-
-For example, for the following test organization, we will define a policy that only allows you to create a workload identity using
-a the specified OIDC providers URL
-
-```bash
-$ gcloud organizations list
-    DISPLAY_NAME               ID  DIRECTORY_CUSTOMER_ID
-    esodemoapp2.com  673208786092              redacted
-
-
-
-$ gcloud resource-manager org-policies allow constraints/iam.workloadIdentityPoolProviders \
-   --organization=673208786092 https://securetoken.google.com/cicp-oidc-test/
-
-      constraint: constraints/iam.workloadIdentityPoolProviders
-      etag: BwWybJWeyeU=
-      listPolicy:
-        allowedValues:
-        - https://securetoken.google.com/cicp-oidc-test/
-      updateTime: '2020-10-24T15:45:19.794Z'
-
-
-$ gcloud beta iam workload-identity-pools providers create-oidc oidc-provider-3 \
-    --workload-identity-pool="oidc-pool-1" \
-    --issuer-uri="https://securetoken.google.com/foo/" \
-    --location="global" \
-    --attribute-mapping="google.subject=assertion.sub,attribute.isadmin=assertion.isadmin,attribute.aud=assertion.aud" \
-    --attribute-condition="attribute.isadmin=='true' && attribute.aud=='cicp-oidc-test'"
-    
-    ERROR: (gcloud.beta.iam.workload-identity-pools.providers.create-oidc) FAILED_PRECONDITION: Precondition check failed.
-    - '@type': type.googleapis.com/google.rpc.PreconditionFailure
-      violations:
-      - description: "Org Policy violated for value: 'https://securetoken.google.com/foo/'."
-        subject: orgpolicy:projects/user2project2/locations/global/workloadIdentityPools/oidc-pool-1
-        type: constraints/iam.workloadIdentityPoolProviders
-
-```
-
----
 
 #### Create OIDC token using Identity Platform
 
@@ -498,4 +341,182 @@ Notice the `access_token` (which is actually a JWT id_token which you can decode
       "sign_in_provider": "password"
     }
   }
+```
+
+### Manual
+
+
+Before you run the sample, you must first get an OIDC Token.  See `Create OIDC token using Identity Platform` above
+
+```bash
+export OIDC_TOKEN=`node login.js  | jq -r '.user.stsTokenManager.accessToken'`
+echo $OIDC_TOKEN > /tmp/oidccred.txt
+```
+
+At this point, we are ready to use the OIDC token and exchange it manually
+
+
+```bash
+$ go run main.go \
+   --gcpBucket mineral-minutia-820-cab1 \
+   --gcpObjectName foo.txt \
+   --gcpResource //iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/oidc-pool-1/providers/oidc-provider-1 \
+   --gcpTargetServiceAccount oidc-federated@$PROJECT_ID.iam.gserviceaccount.com \
+   --useIAMToken \
+   --sourceToken $OIDC_TOKEN
+
+2020/10/24 07:16:14 OIDC Derived GCP access_token: ya29.c.KuQC4gf-xkKbOCIzRGAmAPdL2unF4vLCjZG7TZv7l7bjCK67n2qduIFDs63HR...
+
+fooooo
+```
+
+What you should see is the output of the GCS file
+
+
+### Automatic
+
+We are now ready to use the Automatic Application Default Credentials to access the ressource
+
+First configure the ADC bootstrap file:
+
+```bash
+gcloud beta iam workload-identity-pools create-cred-config  \
+  projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/oidc-pool-1/providers/oidc-provider-1   \
+  --service-account=oidc-federated@$PROJECT_ID.iam.gserviceaccount.com   \
+  --output-file=sts-creds.json  \
+  --credential-source-file=/tmp/oidccred.txt
+```
+
+The output/bootstrap file should look something like this:
+
+```json
+{
+  "type": "external_account",
+  "audience": "//iam.googleapis.com/projects/1071284184436/locations/global/workloadIdentityPools/oidc-pool-1/providers/oidc-provider-1",
+  "subject_token_type": "urn:ietf:params:oauth:token-type:jwt",
+  "token_url": "https://sts.googleapis.com/v1/token",
+  "credential_source": {
+    "file": "/tmp/oidccred.txt"
+  },
+  "service_account_impersonation_url": "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/oidc-federated@cicp-oidc-test.iam.gserviceaccount.com:generateAccessToken"
+}
+```
+
+Notice the bootstrap file has a pointer to the file where the actual creds exist `/tmp/oidccreds.txt`.  (eventually other cred sources should be supported)
+
+Before you run the sample, you must first get an OIDC Token.  See `Create OIDC token using Identity Platform` below
+
+> Remember `/tmp/oidccred.txt` has the content of the raw OIDC token to use (i.,e is the value of $OIDC_TOKEN)
+
+```bash
+export OIDC_TOKEN=`node login.js  | jq -r '.user.stsTokenManager.accessToken'`
+echo $OIDC_TOKEN > /tmp/oidccred.txt
+```
+
+```bash
+export GOOGLE_APPLICATION_CREDENTIALS=`pwd`/sts-creds.json
+
+go run main.go    --gcpBucket mineral-minutia-820-cab1    --gcpObjectName foo.txt --useADC 
+```
+
+
+At the time of writing (3/14/21), the configuration file (only supports reading of a file that contains the oidc token (`/tmp/oidccred.txt`) directly.  Eventually, other mechanisms like url or executing a binary that returns the oidc token will be supported
+
+### Using Federated or IAM Tokens
+
+GCP STS Tokens can be used directly against a few GCP services as described here
+
+Skip step `(5)` of [Exchange Token](https://cloud.google.com/iam/docs/access-resources-oidc#exchange-token)
+
+What that means is you can skip the step to exchange the GCP Federation token for an Service Account token and _directly_ apply IAM policies on the resource.
+
+This not only saves the step of running the exchange but omits the need for a secondary GCP service account to impersonate.
+
+To use GCS, allow either the mapped identity direct access to the resource.  In this case `storage.objectAdmin` access which we already allowed earlier:
+
+
+* Allow Federated Identity IAM access
+
+  Configure the federated identity access to GCS bucket. 
+This allows a single user `alice@domain.com` 
+
+```bash
+gcloud projects add-iam-policy-binding $PROJECT_ID  \
+ --member "principal://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/oidc-pool-1/subject/alice@domain.com" \
+ --role roles/storage.objectAdmin
+```
+
+```bash
+gcloud projects add-iam-policy-binding $PROJECT_ID  \
+ --member "principalSet://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/oidc-pool-1/attribute.isadmin/true" \
+ --role roles/storage.objectAdmin
+```
+ 
+  Notice that in this mode we are **directly** allowing the federated identity access to a GCS resource
+
+
+To use Federated tokens, use remove the `--useIAMToken` flag
+
+
+>> **If** you want to use Federated tokens only with the Automatic flow, delete `service_account_impersonation_url` declaration in `sts-creds.json`
+
+
+### Logging
+
+If you used the STS token directly, the principal will appear in the GCS logs if you enabled audit logging
+
+![images/audit_log_config.png](images/audit_log_config.png)
+
+![images/gcs_sts_access.png](images/gcs_sts_access.png)
+
+If you used IAM impersonation, you will see the principal performing the impersonation
+
+![images/iam_impersonation.png](images/iam_impersonation.png)
+
+and then the impersonated account accessing GCS
+
+![images/gcs_iam_access.png](images/gcs_iam_access.png)
+
+Notice the `protoPayload.authenticationInfo` structure between the two types of auth
+
+### Organization Policy Restrict
+
+You can also define a GCP [Organization Policy](https://cloud.google.com/resource-manager/docs/organization-policy/creating-managing-policies) that restricts which providers can be enabled for federation
+
+* `constraints/iam.workloadIdentityPoolProviders`
+
+For example, for the following test organization, we will define a policy that only allows you to create a workload identity using
+a the specified OIDC providers URL
+
+```bash
+$ gcloud organizations list
+    DISPLAY_NAME               ID  DIRECTORY_CUSTOMER_ID
+    esodemoapp2.com  673208786092              redacted
+
+
+
+$ gcloud resource-manager org-policies allow constraints/iam.workloadIdentityPoolProviders \
+   --organization=673208786092 https://securetoken.google.com/cicp-oidc-test/
+
+      constraint: constraints/iam.workloadIdentityPoolProviders
+      etag: BwWybJWeyeU=
+      listPolicy:
+        allowedValues:
+        - https://securetoken.google.com/cicp-oidc-test/
+      updateTime: '2020-10-24T15:45:19.794Z'
+
+
+$ gcloud beta iam workload-identity-pools providers create-oidc oidc-provider-3 \
+    --workload-identity-pool="oidc-pool-1" \
+    --issuer-uri="https://securetoken.google.com/foo/" \
+    --location="global" \
+    --attribute-mapping="google.subject=assertion.sub,attribute.isadmin=assertion.isadmin,attribute.aud=assertion.aud" \
+    --attribute-condition="attribute.isadmin=='true' && attribute.aud=='cicp-oidc-test'"
+    
+    ERROR: (gcloud.beta.iam.workload-identity-pools.providers.create-oidc) FAILED_PRECONDITION: Precondition check failed.
+    - '@type': type.googleapis.com/google.rpc.PreconditionFailure
+      violations:
+      - description: "Org Policy violated for value: 'https://securetoken.google.com/foo/'."
+        subject: orgpolicy:projects/user2project2/locations/global/workloadIdentityPools/oidc-pool-1
+        type: constraints/iam.workloadIdentityPoolProviders
 ```

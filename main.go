@@ -31,6 +31,7 @@ func main() {
 	var storageClient *storage.Client
 	ctx := context.Background()
 	if *useADC {
+		log.Println("Using ADC")
 		var err error
 		storageClient, err = storage.NewClient(ctx)
 		if err != nil {
