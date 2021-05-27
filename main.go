@@ -9,6 +9,7 @@ import (
 
 	"cloud.google.com/go/storage"
 	sal "github.com/salrashid123/oauth2/oidcfederated"
+	"golang.org/x/oauth2"
 	"google.golang.org/api/option"
 )
 
@@ -43,7 +44,9 @@ func main() {
 		}
 		oTokenSource, err := sal.OIDCFederatedTokenSource(
 			&sal.OIDCFederatedTokenConfig{
-				SourceToken:          *sourceToken,
+				SourceTokenSource: oauth2.StaticTokenSource(&oauth2.Token{
+					AccessToken: *sourceToken,
+				}),
 				Scope:                *scope,
 				TargetResource:       *gcpResource,
 				TargetServiceAccount: *gcpTargetServiceAccount,
