@@ -9,7 +9,6 @@ import (
 
 	"cloud.google.com/go/storage"
 	sal "github.com/salrashid123/oauth2/oidcfederated"
-	"golang.org/x/oauth2"
 	"google.golang.org/api/option"
 )
 
@@ -44,9 +43,7 @@ func main() {
 		}
 		oTokenSource, err := sal.OIDCFederatedTokenSource(
 			&sal.OIDCFederatedTokenConfig{
-				SourceTokenSource: oauth2.StaticTokenSource(&oauth2.Token{
-					AccessToken: *sourceToken,
-				}),
+				SourceToken:          *sourceToken,
 				Scope:                *scope,
 				TargetResource:       *gcpResource,
 				TargetServiceAccount: *gcpTargetServiceAccount,
@@ -54,11 +51,11 @@ func main() {
 			},
 		)
 
-		// tok, err := oTokenSource.Token()
-		// if err != nil {
-		// 	log.Fatal(err)
-		// }
-		//log.Printf("OIDC Derived GCP access_token: %s\n", tok.AccessToken)
+		tok, err := oTokenSource.Token()
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Printf("OIDC Derived GCP access_token: %s\n", tok.AccessToken)
 
 		storageClient, err = storage.NewClient(ctx, option.WithTokenSource(oTokenSource))
 		if err != nil {

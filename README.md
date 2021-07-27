@@ -49,7 +49,7 @@ This tutorial will cover how to use an OIDC token and its claims to a GCP  [prin
 
 * User:  `principal://`  This maps a unique user identified by OIDC to a GCP identity
 
-* Group: `principalSet://` This maps any user that has a given attrubute declared in the OIDC token to a GCP identity 
+* Group: `principalSet://` This maps any user that has a given attrubute or group declared in the OIDC token to a GCP identity 
 
 
 In both cases, the GCP Identity is a Service Account that the external user impersonates.
@@ -58,7 +58,7 @@ In both cases, the GCP Identity is a Service Account that the external user impe
 
 First we need an OIDC token provider that will give us an `id_token`.  Just for demonstration, we will use [Google Cloud Identity Platform](https://cloud.google.com/identity-platform) as the provider (you can of course use okta, auth0, even google itself).
 
-The GCP project i am using in the example here is called `mineral-minutia-820`.  Identity platform will automatically create a 'bare bones' oidc `.well-known` endpoint at a url that includes the projectID:
+The GCP project i am using in the example here is called `fabled-ray-104117`.  Identity platform will automatically create a 'bare bones' oidc `.well-known` endpoint at a url that includes the projectID:
 
 * [https://securetoken.google.com/mineral-minutia-820/.well-known/openid-configuration](https://securetoken.google.com/mineral-minutia-820/.well-known/openid-configuration)
 
@@ -80,10 +80,10 @@ The following shows how to acquire an OIDC token for use with this tutorial.  As
 
 ```javascript
 var firebaseConfig = {
-  apiKey: "AIzaSyAf7wesN7auBeyfJQJs5d_QfT24kMH7OG8",
-  authDomain: "cicp-oidc-test.firebaseapp.com",
-  projectId: "cicp-oidc-test",
-  appId: "cicp-oidc-test",
+  apiKey: "AIzaSyAf7wesN7auBeyfJQJ--redacted",
+  authDomain: "fabled-ray-104117.firebaseapp.com",
+  projectId: "fabled-ray-104117",
+  appId: "fabled-ray-104117",
 };
 ```
 
@@ -92,7 +92,7 @@ var firebaseConfig = {
   - [Set up a Firebase project and service account](https://firebase.google.com/docs/admin/setup#set-up-project-and-service-account)
 
    Generate a service account and download it from the firebase console: (note, replace with your projectID in the URL field below)
-   - [https://console.firebase.google.com/u/0/project/cicp-oidc-test/settings/serviceaccounts/adminsdk](https://console.firebase.google.com/u/0/project/cicp-oidc-test/settings/serviceaccounts/adminsdk)
+   - [https://console.firebase.google.com/u/0/project/fabled-ray-104117/settings/serviceaccounts/adminsdk](https://console.firebase.google.com/u/0/project/cicp-oidc-test/settings/serviceaccounts/adminsdk)
 
    Save the file as `/tmp/svc_account.json`
 
@@ -118,11 +118,11 @@ $ node create.js
       disabled: false,
       metadata:
       { lastSignInTime: null,
-        creationTime: 'Sun, 25 Oct 2020 11:11:14 GMT' },
+        creationTime: 'Mon, 26 Jul 2021 18:10:50 GMT' },
       passwordHash: undefined,
       passwordSalt: undefined,
-      customClaims: { isadmin: 'true' },
-      tokensValidAfterTime: 'Sun, 25 Oct 2020 11:11:14 GMT',
+      customClaims: { isadmin: 'true', mygroups: [ 'group1', 'group2' ] },
+      tokensValidAfterTime: 'Mon, 26 Jul 2021 18:10:50 GMT',
       tenantId: undefined,
       providerData:
       [ { uid: 'alice@domain.com',
@@ -164,11 +164,11 @@ $ node login.js
         ],
         "apiKey": "AIzaSyAf7wesN7auBeyfJQJs5d_QfT24kMH7OG8",
         "appName": "[DEFAULT]",
-        "authDomain": "cicp-oidc-test.firebaseapp.com",
+        "authDomain": "fabled-ray-104117.firebaseapp.com",
         "stsTokenManager": {
           "apiKey": "AIzaSyAf7wesN7auBeyfJQJs5d_QfT24kMH7OG8",
           "refreshToken": "AG8BCncodfNZo5RjfUIaayD-redacted",
-          "accessToken": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImQxMGM4ZjhiMGRjN2Y1NWUyYjM1NDFmMjllNWFjMzc0M2Y3N2NjZWUiLCJ0eXAiOiJKV1QifQ.eyJuYW1lIjoiYWxpY2UiLCJpc2FkbWluIjoidHJ1ZSIsImlzcyI6Imh0dHBzOi8vc2VjdXJldG9rZW4uZ29vZ2xlLmNvbS9jaWNwLW9pZGMtdGVzdCIsImF1ZCI6ImNpY3Atb2lkYy10ZXN0IiwiYXV0aF90aW1lIjoxNjAzNjI0MzAxLCJ1c2VyX2lkIjoiYWxpY2VAZG9tYWluLmNvbSIsInN1YiI6ImFsaWNlQGRvbWFpbi5jb20iLCJpYXQiOjE2MDM2MjQzMDEsImV4cCI6MTYwMzYyNzkwMSwiZW1haWwiOiJhbGljZUBkb21haW4uY29tIiwiZW1haWxfdmVyaWZpZWQiOnRydWUsImZpcmViYXNlIjp7ImlkZW50aXRpZXMiOnsiZW1haWwiOlsiYWxpY2VAZG9tYWluLmNvbSJdfSwic2lnbl9pbl9wcm92aWRlciI6InBhc3N3b3JkIn19.oSB2vYLo8gX_CakDaO9MGHYeXGwHUySYYPhhFqL7Fx-glSrQx5O_fMSLqF0p48SvHlN47bNDYfhuwR5HRbxnn_w6XxP0cFkGInRiZngwQyFapiEbpnlT7GCU-u2KWfci0mi770giOBn4ZmiavqtmENZPyR2FcwKCRn9tPNpzFPLXG-uUPjd1zj3YblFsHwBtZo8jcmkDMMo_-Y52z5JQiHyG5sfANjldlgabnygUtInAHNvjJXDiRP0p0u4yuOjjq8mjMX9IPN1KXyHoSqaBjQCVmQqbzlx7jIl75dUxAI7x-OZ-4eZ4fWZvItYaLoQpBHQWpxLszqCYztCKz4dzxg",
+          "accessToken": "eyJhbGciOiJSUzI1NiIsImtpZCI6IjFiYjk2MDVjMzZlOThlMzAxMTdhNjk1MTc1NjkzODY4MzAyMDJiMmQiLCJ0eXAiOiJKV1QifQ.eyJuYW1lIjoiYWxpY2UiLCJpc2FkbWluIjoidHJ1ZSIsIm15Z3JvdXBzIjpbImdyb3VwMSIsImdyb3VwMiJdLCJpc3MiOiJodHRwczovL3NlY3VyZXRva2VuLmdvb2dsZS5jb20vZmFibGVkLXJheS0xMDQxMTciLCJhdWQiOiJmYWJsZWQtcmF5LTEwNDExNyIsImF1dGhfdGltZSI6MTYyNzMyMzEwOSwidXNlcl9pZCI6ImFsaWNlQGRvbWFpbi5jb20iLCJzdWIiOiJhbGljZUBkb21haW4uY29tIiwiaWF0IjoxNjI3MzIzMTA5LCJleHAiOjE2MjczMjY3MDksImVtYWlsIjoiYWxpY2VAZG9tYWluLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJmaXJlYmFzZSI6eyJpZGVudGl0aWVzIjp7ImVtYWlsIjpbImFsaWNlQGRvbWFpbi5jb20iXX0sInNpZ25faW5fcHJvdmlkZXIiOiJwYXNzd29yZCJ9fQ.lEJZ-tHRCOAR0kKiN9AoAB6Y7HXoSeQDQnDW2QqA1ouJd_nudlcjMW4tjsdpowtAmHprytPRsrJ35zz8r5BXu_jDX5k-aASIUw4Eg9mk1eCxXGIZn6Pv54K7MBMq-2lgzaTkpvNjX9-3jlUagOd6U0cbeTHFk4_9yA4jAS0dp2sixx_dQer0qRXJ96EIZ4XsGh_6to4DdG4n6k0V25vNchKd0vuM5G14yb2lpxmu9yE0EEXrujzgrVErFOzLZd4xeBR6svn6X-9NmYf3ffoyQv_ZF0bCTligQsBApg2aa95guig8jA5Gsf-XnuPWmSTcpu1PG54Zzw78enylr3WyHw",
           "expirationTime": 1603627901000
         },
         "redirectEventId": null,
@@ -198,35 +198,39 @@ The `access_token` is actually a JWT id_token which you can decode at [jwt.io](j
 Notice the `isadmin` and `sub` fields there
 
 ```json
-  {
-    "name": "alice",
-    "isadmin": "true",
-    "iss": "https://securetoken.google.com/cicp-oidc-test",
-    "aud": "cicp-oidc-test",
-    "auth_time": 1603624301,
-    "user_id": "alice@domain.com",
-    "sub": "alice@domain.com",
-    "iat": 1603624301,
-    "exp": 1603627901,
-    "email": "alice@domain.com",
-    "email_verified": true,
-    "firebase": {
-      "identities": {
-        "email": [
-          "alice@domain.com"
-        ]
-      },
-      "sign_in_provider": "password"
+    {
+      "name": "alice",
+      "isadmin": "true",
+      "mygroups": [
+        "group1",
+        "group2"
+      ],
+      "iss": "https://securetoken.google.com/fabled-ray-104117",
+      "aud": "fabled-ray-104117",
+      "auth_time": 1627323109,
+      "user_id": "alice@domain.com",
+      "sub": "alice@domain.com",
+      "iat": 1627323109,
+      "exp": 1627326709,
+      "email": "alice@domain.com",
+      "email_verified": true,
+      "firebase": {
+        "identities": {
+          "email": [
+            "alice@domain.com"
+          ]
+        },
+        "sign_in_provider": "password"
+      }
     }
-  }
 ```
 
 Some things to note
 
 * `issuer` is `https://securetoken.google.com/mineral-minutia-820`,
 * `sub` field describes the username
-* `isadmin` is a custom claim which we will use for the `principalSet://` mapping
-
+* `isadmin` is a custom claim which we will use for the `principalSet://` **attribute mapping**
+* `mygroups.*` is a custom claim which we will use for the `principalSet://` **group mapping**
 
 ### Configure OIDC Federation
 
@@ -253,10 +257,10 @@ gcloud beta iam workload-identity-pools create oidc-pool-1 \
 ```bash
 gcloud beta iam workload-identity-pools providers create-oidc oidc-provider-1 \
     --workload-identity-pool="oidc-pool-1" \
-    --issuer-uri="https://securetoken.google.com/mineral-minutia-820/" \
+    --issuer-uri="https://securetoken.google.com/fabled-ray-104117/" \
     --location="global" \
     --attribute-mapping="google.subject=assertion.sub,attribute.isadmin=assertion.isadmin,attribute.aud=assertion.aud" \
-    --attribute-condition="attribute.isadmin=='true' && attribute.aud=='mineral-minutia-820'" --project $PROJECT_ID
+    --attribute-condition="attribute.isadmin=='true' && attribute.aud=='fabled-ray-104117'" --project $PROJECT_ID
 ```
 
   Notice the attribute mapping:
@@ -265,12 +269,23 @@ gcloud beta iam workload-identity-pools providers create-oidc oidc-provider-1 \
 
   Notice  the attribute conditions:
   * `attribute.isadmin=='true'`: This describes the condition that this provider must meet.  The provided idToken's `isadmin` field MUST be set to true
-  * `attribute.aud=='mineral-minutia-820'`:  This describes the audience value in the token must be set to the project you are using (in my case `mineral-minutia-820`)
+  * `attribute.aud=='fabled-ray-104117'`:  This describes the audience value in the token must be set to the project you are using (in my case `fabled-ray-104117`)
 
 If you set the attribute conditions to something else, you should see an error during authentication:
 
 ```
 Unable to exchange token {"error":"unauthorized_client","error_description":"The given credential is rejected by the attribute condition."},
+```
+
+For group mapping
+
+```bash
+gcloud beta iam workload-identity-pools providers create-oidc oidc-provider-2 \
+    --workload-identity-pool="oidc-pool-1" \
+    --issuer-uri="https://securetoken.google.com/fabled-ray-104117/" \
+    --location="global" \
+    --attribute-mapping="google.subject=assertion.sub,google.groups=assertion.mygroups,attribute.aud=assertion.aud" \
+    --attribute-condition="attribute.aud=='fabled-ray-104117'" --project $PROJECT_ID
 ```
 
 * Create GCS Resource
@@ -302,12 +317,24 @@ gcloud iam service-accounts add-iam-policy-binding oidc-federated@$PROJECT_ID.ia
     --member "principal://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/oidc-pool-1/subject/alice@domain.com"
 ```
 
+- A) Attribute Mapping
+
 This allows any user part of the OIDC issuer that has the claim embedded in the token with key-value `isadmin==true`
 
 ```bash
 gcloud iam service-accounts add-iam-policy-binding oidc-federated@$PROJECT_ID.iam.gserviceaccount.com \
     --role roles/iam.workloadIdentityUser \
     --member "principalSet://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/oidc-pool-1/attribute.isadmin/true"
+```
+
+- B) Group Mapping
+
+The following allows any user that is in `group` of the claim permission to impersonate this service account
+
+```bash
+gcloud iam service-accounts add-iam-policy-binding oidc-federated@$PROJECT_ID.iam.gserviceaccount.com \
+    --role roles/iam.workloadIdentityUser \
+    --member "principalSet://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/oidc-pool-1/group/group1"
 ```
 
 * Allow service account access to GCS
@@ -328,12 +355,29 @@ echo $OIDC_TOKEN > /tmp/oidccred.txt
 
 At this point, we are ready to use the OIDC token and exchange it manually
 
+- Attribute Mapping 
 
 ```bash
 $ go run main.go \
-   --gcpBucket mineral-minutia-820-cab1 \
+   --gcpBucket $PROJECT_ID-test \
    --gcpObjectName foo.txt \
    --gcpResource //iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/oidc-pool-1/providers/oidc-provider-1 \
+   --gcpTargetServiceAccount oidc-federated@$PROJECT_ID.iam.gserviceaccount.com \
+   --useIAMToken \
+   --sourceToken $OIDC_TOKEN
+
+2020/10/24 07:16:14 OIDC Derived GCP access_token: ya29.c.KuQC4gf-xkKbOCIzRGAmAPdL2unF4vLCjZG7TZv7l7bjCK67n2qduIFDs63HR...
+
+fooooo
+```
+
+- Group Mapping 
+
+```bash
+$ go run main.go \
+   --gcpBucket $PROJECT_ID-test \
+   --gcpObjectName foo.txt \
+   --gcpResource //iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/oidc-pool-1/providers/oidc-provider-2 \
    --gcpTargetServiceAccount oidc-federated@$PROJECT_ID.iam.gserviceaccount.com \
    --useIAMToken \
    --sourceToken $OIDC_TOKEN
@@ -389,8 +433,10 @@ echo $OIDC_TOKEN > /tmp/oidccred.txt
 ```bash
 export GOOGLE_APPLICATION_CREDENTIALS=`pwd`/sts-creds.json
 
-go run main.go    --gcpBucket mineral-minutia-820-cab1    --gcpObjectName foo.txt --useADC 
+go run main.go    --gcpBucket $PROJECT_ID-test    --gcpObjectName foo.txt --useADC 
 ```
+
+> If you would rather use `google.group=` mapping wiht a `principalSet://`, change the `create-cred-config` to use `oidc-provider-2`
 
 
 At the time of writing (3/14/21), the configuration file (only supports reading of a file that contains the oidc token (`/tmp/oidccred.txt`) directly.  Eventually, other mechanisms like url or executing a binary that returns the oidc token will be supported
@@ -422,6 +468,12 @@ gcloud projects add-iam-policy-binding $PROJECT_ID  \
 ```bash
 gcloud projects add-iam-policy-binding $PROJECT_ID  \
  --member "principalSet://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/oidc-pool-1/attribute.isadmin/true" \
+ --role roles/storage.objectAdmin
+```
+
+```bash
+gcloud projects add-iam-policy-binding $PROJECT_ID  \
+ --member "principalSet://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/oidc-pool-1/group/group1" \
  --role roles/storage.objectAdmin
 ```
  

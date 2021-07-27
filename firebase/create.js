@@ -19,7 +19,7 @@ admin.auth().createUser({
   })
     .then(function(userRecord) { 
      // console.log('Successfully created new user:', userRecord.toJSON());
-      admin.auth().setCustomUserClaims(uid, {isadmin: 'true'}).then(() => {
+      admin.auth().setCustomUserClaims(uid, {isadmin: 'true', mygroups:["group1","group2"]}).then(() => {
         admin.auth().getUser(uid).then((userRecord) => {
             console.log(userRecord.toJSON());
             process.exit(0);
