@@ -9,6 +9,7 @@ import (
 
 	"cloud.google.com/go/storage"
 	sal "github.com/salrashid123/oauth2/oidcfederated"
+	"golang.org/x/oauth2"
 	"google.golang.org/api/option"
 )
 
@@ -41,9 +42,14 @@ func main() {
 		if *sourceToken == "" {
 			log.Fatalf("sourceToken cannot be null")
 		}
+
+		srcTokenSrc := oauth2.StaticTokenSource(&oauth2.Token{
+			AccessToken: *sourceToken,
+		})
+
 		oTokenSource, err := sal.OIDCFederatedTokenSource(
 			&sal.OIDCFederatedTokenConfig{
-				SourceToken:          *sourceToken,
+				SourceTokenSource:    srcTokenSrc,
 				Scope:                *scope,
 				TargetResource:       *gcpResource,
 				TargetServiceAccount: *gcpTargetServiceAccount,
