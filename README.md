@@ -103,7 +103,8 @@ var firebaseConfig = {
 6. Create user
 
 ```bash
-npm i firebase firebase-admin
+cd firebase/
+npm i 
 ```
 
 ```bash
